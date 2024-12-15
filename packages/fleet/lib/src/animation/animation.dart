@@ -429,6 +429,14 @@ abstract class AnimationImpl<T> with Diagnosticable {
 
     var elapsedForRepeat = elapsedForAllRepeats - _lastRepeatEnd;
 
+    var isDone = false;
+
+    void onFinishRepeat() {
+      if (!_spec._repeatForever && ++_repeat >= _spec._repeatCount) {
+        isDone = true;
+      }
+    }
+
     if (_forward) {
       final endDelta = isAtEnd(elapsedForRepeat);
       if (endDelta != null) {
@@ -441,7 +449,7 @@ abstract class AnimationImpl<T> with Diagnosticable {
           _forward = false;
         }
 
-        _onFinishRepeat();
+        onFinishRepeat();
       }
     } else {
       elapsedForRepeat = _lastRepeatDuration - elapsedForRepeat;
@@ -452,11 +460,11 @@ abstract class AnimationImpl<T> with Diagnosticable {
 
         _forward = true;
 
-        _onFinishRepeat();
+        onFinishRepeat();
       }
     }
 
-    if (_isStopped) {
+    if (isDone) {
       // On the last tick we need to be exactly at the end of the animation.
       // If the animation is repeated and reversing it is possible that the
       // last tick is at the beginning of the animation.
@@ -466,10 +474,8 @@ abstract class AnimationImpl<T> with Diagnosticable {
     }
 
     onChange?.call();
-  }
 
-  void _onFinishRepeat() {
-    if (!_spec._repeatForever && ++_repeat >= _spec._repeatCount) {
+    if (isDone) {
       stop();
     }
   }
