@@ -12,6 +12,7 @@ export 'src/animation/duration.dart' show DurationFromIntExtension;
 export 'src/animation/graph.dart'
     show
         Action,
+        AnimatedDoubleExtension,
         AnimatedValue,
         AnimationGraphController,
         AnimationGraphMixin,

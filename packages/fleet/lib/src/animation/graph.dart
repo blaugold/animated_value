@@ -145,6 +145,28 @@ final class AnimatedValue<T> {
   T _get(AnimationGraphController controller) => _animation(controller).value;
 }
 
+/// Convenience extensions for [AnimatedValue]s that have [double] as their
+/// type.
+extension AnimatedDoubleExtension on AnimatedValue<double> {
+  /// Creates an [AnimationNode] that animates this value to to `1.0`.
+  AnimationNode forward(
+    Duration duration, {
+    double? from,
+    Duration delay = Duration.zero,
+    Curve curve = Curves.linear,
+  }) =>
+      to(1, duration, from: from, delay: delay, curve: curve);
+
+  /// Creates an [AnimationNode] that animates this value to to `0.0`.
+  AnimationNode reverse(
+    Duration duration, {
+    double? from,
+    Duration delay = Duration.zero,
+    Curve curve = Curves.linear,
+  }) =>
+      to(0, duration, from: from, delay: delay, curve: curve);
+}
+
 /// A node in an animation graph.
 abstract class AnimationNode {
   /// Accepts a [visitor] to visit this node.
