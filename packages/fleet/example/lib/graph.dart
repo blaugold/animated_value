@@ -67,9 +67,6 @@ class _PageState extends State<Page>
     // Cancel all running animations before starting a new one, in case the
     // previous animation has not completed. If two animations are run in
     // parallel that affect the same value, the result can be unpredictable.
-    // If one animation starts a new value animation for the same animated value
-    // while the previous animation is still running, the previous animation
-    // is stopped and the new animation starts from the current value.
     cancelAllAnimations();
     animate(_buildAnimation());
   }
@@ -112,7 +109,7 @@ class _PageState extends State<Page>
 }
 
 // This widget is reusable since it is decoupled from the concrete
-// AnimationGraphController and AnimationKey used in the AnimationGraph.
+// AnimationGraphController and AnimatedValue used in the animation graph.
 class _ColoredSquare extends StatelessWidget {
   const _ColoredSquare({required this.color});
 
