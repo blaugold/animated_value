@@ -10,16 +10,20 @@ final _color = AnimatedValue.color(defaultValue: Colors.pink, name: 'color');
 final _offset = AnimatedValue.offset(name: 'offset');
 
 AnimationNode _buildAnimation() {
+  // An animation graph is an immutable data structure that represents an
+  // animation. It is built by composing animation nodes. Group runs its
+  // children in parallel, Sequence runs its children in sequence.
   return Sequence([
-    // This node resets all animated values of the running animation to their
-    // default values.
+    // Here we reset all animated values to their default value.
     // This is necessary, in case the animation has already been run, because
     // the animated values are not reset automatically.
     // Unless `AnimatedValue.to(from: ...)` is specified, the animation of
     // that value starts from the value that was last set, either by an
     // animation, explicitly, or by resetting to the default value.
-    // This concept generally simplifies creating animations.
-    Reset(),
+    Group([
+      for (final value in [_scale, _rotation, _opacity, _color, _offset])
+        value.reset(),
+    ]),
     Group([
       _scale.to(2, 300.ms, curve: Curves.ease),
       _rotation.to(.25, 300.ms, curve: Curves.ease),

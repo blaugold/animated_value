@@ -16,6 +16,7 @@ abstract final class SuccessAnimation {
   static final secondaryButtonScale = AnimatedValue.double$();
 
   AnimationNode enterAnimation() {
+    // TODO: allow specifying the default curve for a hole sub-graph.
     return Sequence([
       Pause(400.ms),
       Group([
