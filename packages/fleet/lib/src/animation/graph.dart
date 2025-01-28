@@ -197,9 +197,6 @@ abstract class AnimationElement {
   AnimationElement get parent => _parent;
   late final AnimationElement _parent;
 
-  /// The child elements of this element in the animation graph.
-  List<AnimationElement> get children => const [];
-
   /// The [AnimationNode] that this element was created from.
   AnimationNode get node;
 
@@ -279,7 +276,6 @@ class _GroupElement extends AnimationElement {
   @override
   final Group node;
 
-  @override
   final List<AnimationElement> children = [];
   final List<Duration> elapsedAfterExitsInCurrentTick = [];
 
