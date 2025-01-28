@@ -13,34 +13,38 @@ AnimationNode _buildAnimation() {
   // An animation graph is an immutable data structure that represents an
   // animation. It is built by composing animation nodes. Group runs its
   // children in parallel, Sequence runs its children in sequence.
-  return Sequence([
-    // Here we reset all animated values to their default value.
-    // This is necessary, in case the animation has already been run, because
-    // the animated values are not reset automatically.
-    // Unless `AnimatedValue.to(from: ...)` is specified, the animation of
-    // that value starts from the value that was last set, either by an
-    // animation, explicitly, or by resetting to the default value.
-    Reset(),
-    Group([
-      _scale.to(2, 300.ms, curve: Curves.ease),
-      _rotation.to(.25, 300.ms, curve: Curves.ease),
-      _opacity.to(1, from: 0, 200.ms),
+  return ValueAnimationDefaults(
+    curve: Curves.ease,
+    Sequence([
+      // Here we reset all animated values to their default value.
+      // This is necessary, in case the animation has already been run, because
+      // the animated values are not reset automatically.
+      // Unless `AnimatedValue.to(from: ...)` is specified, the animation of
+      // that value starts from the value that was last set, either by an
+      // animation, explicitly, or by resetting to the default value.
+      resetAll([
+        _scale,
+        _rotation,
+        _opacity,
+        _color,
+        _offset,
+      ]),
+      Group([
+        _scale.to(2, over: 300.ms),
+        _rotation.to(.25, over: 300.ms),
+        _opacity.to(1, from: 0, over: 200.ms, curve: Curves.linear),
+      ]),
+      Pause(500.ms),
+      Group([
+        _color.to(Colors.teal, over: 500.ms, curve: Curves.linear),
+        _scale.to(1, over: 500.ms),
+        _offset.to(const Offset(300, 0), over: 500.ms).delay(200.ms),
+        _opacity.to(0, over: 1.s, curve: Curves.linear).delay(300.ms),
+      ]),
+      // ignore: avoid_print
+      Action(() => print('Animation completed')),
     ]),
-    Pause(500.ms),
-    Group([
-      _color.to(Colors.teal, 500.ms),
-      _scale.to(1, 500.ms, curve: Curves.ease),
-      _offset.to(
-        const Offset(300, 0),
-        500.ms,
-        curve: Curves.ease,
-        delay: 200.ms,
-      ),
-      _opacity.to(0, 1.s, delay: 300.ms),
-    ]),
-    // ignore: avoid_print
-    Action(() => print('Animation completed')),
-  ])
+  )
       // The speed of all nodes in the animation graph can be adjusted by
       // this single call. This is useful for debugging purposes.
       .speed(1);

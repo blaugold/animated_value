@@ -1,9 +1,8 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
-
-import 'animation.dart';
 
 /// An animated value that can participate in an animation graph.
 ///
@@ -88,28 +87,28 @@ final class AnimatedValue<T> {
   /// If [from] is provided, the animation will start from that value. Otherwise
   /// the animation will start from the current value of this animated value.
   ///
-  /// The animation will have a duration of [duration] and will start after a
-  /// delay of [delay] (defaults to zero).
+  /// The animation will have a duration of [over].
   ///
   /// The animation will use the specified [curve] (defaults to
   /// [Curves.linear]).
   AnimationNode to(
-    T value,
-    Duration duration, {
+    T value, {
     T? from,
-    Duration delay = Duration.zero,
-    Curve curve = Curves.linear,
+    // TODO: Consider alternatives to name of parameter `over`.
+    Duration? over,
+    Curve? curve,
   }) {
     return ValueAnimation(
-      spec: AnimationSpec.curve(curve, duration).delay(delay),
       value: this,
       from: from,
       to: value,
+      duration: over,
+      curve: curve,
     );
   }
 
   /// Creates an [AnimationNode] that jumps to a new [value] without animating.
-  AnimationNode jump(T value) => to(value, Duration.zero);
+  AnimationNode jump(T value) => to(value, over: Duration.zero);
 
   /// Creates an [AnimationNode] that resets this animated value to its
   /// [defaultValue] without animating.
@@ -149,139 +148,117 @@ final class AnimatedValue<T> {
 /// type.
 extension AnimatedDoubleExtension on AnimatedValue<double> {
   /// Creates an [AnimationNode] that animates this value to to `1.0`.
-  AnimationNode forward(
-    Duration duration, {
+  AnimationNode forward({
+    Duration? over,
     double? from,
-    Duration delay = Duration.zero,
-    Curve curve = Curves.linear,
+    Curve? curve,
   }) =>
-      to(1, duration, from: from, delay: delay, curve: curve);
+      to(1, over: over, from: from, curve: curve);
 
   /// Creates an [AnimationNode] that animates this value to to `0.0`.
-  AnimationNode reverse(
-    Duration duration, {
+  AnimationNode reverse({
+    Duration? over,
     double? from,
-    Duration delay = Duration.zero,
-    Curve curve = Curves.linear,
+    Curve? curve,
   }) =>
-      to(0, duration, from: from, delay: delay, curve: curve);
+      to(0, over: over, from: from, curve: curve);
 }
 
 /// A node in an animation graph.
+///
+/// A node is an immutable configuration for an [AnimationElement]. The same
+/// node can be reused and run multiple times with
+/// [AnimationGraphController.animate].
+// ignore: one_member_abstracts
 abstract class AnimationNode {
-  /// Accepts a [visitor] to visit this node.
-  T _accept<T>(_AnimationNodeVisitor<T> visitor);
-
-  /// Visits the children of this node with the specified [visitor].
-  // ignore: unused_element
-  void _visitChildren(_AnimationNodeVisitor<void> visitor);
-
-  _AnimationElement _createElement();
+  /// Creates an [AnimationElement] that will be used to run this node in an
+  /// animation graph.
+  AnimationElement createElement();
 }
 
-abstract class _AnimationElement {
+/// A callback that is called when an [AnimationElement] exits.
+///
+/// The [elapsedAfterExit] parameter is the duration that has elapsed since the
+/// [AnimationElement] has exited and the current tick.
+typedef OnExitCallback = void Function(Duration elapsedAfterExit);
+
+void _noOpOnExit(Duration elapsedAfterExit) {}
+
+/// Represents the instantiation of an [AnimationNode] in an animation
+/// graph when running an animation node.
+abstract class AnimationElement {
+  /// The [GraphAnimation] that this element belongs to.
   late final GraphAnimation animation;
-  VoidCallback? onComplete;
 
-  void start();
-  void cancel();
+  /// Whether this element is the root element of the animation graph.
+  bool get isRoot => false;
 
-  _AnimationElement createChild(AnimationNode node) =>
-      node._createElement()..animation = animation;
-}
+  /// The parent element of this element in the animation graph.
+  AnimationElement get parent => _parent;
+  late final AnimationElement _parent;
 
-/// A visitor for visiting nodes in an animation graph.
-abstract class _AnimationNodeVisitor<T> {
-  /// Visits a [Group] node.
-  T visitGroup(Group node);
+  /// The child elements of this element in the animation graph.
+  List<AnimationElement> get children => const [];
 
-  /// Visits a [Sequence] node.
-  T visitSequence(Sequence node);
+  /// The [AnimationNode] that this element was created from.
+  AnimationNode get node;
 
-  /// Visits a [ValueAnimation] node.
-  T visitValueAnimation<V>(ValueAnimation<V> node);
+  /// The callback that is called when this element exits.
+  OnExitCallback onExit = _noOpOnExit;
 
-  /// Visits a [Reset] node.
-  T visitReset(Reset node);
+  /// The method that is called on every animation frame to update the state of
+  /// this element.
+  ///
+  /// [elapsed] is the duration that has elapsed since this element has started
+  /// animating.
+  ///
+  /// Conceptional every element starts animating from a duration of zero. But
+  /// the first call to [tick] can have a non-zero duration if for example a
+  /// previous element has complete its animation between frames. In this case
+  /// [elapsed] of the first call to [tick] is the duration that has elapsed
+  /// since the previous element has completed and the current frame.
+  // TODO: Add parameter to indicate that time is running backwards.
+  void tick(Duration elapsed);
 
-  /// Visits an [Action] node.
-  T visitAction(Action node);
-}
+  /// Disposes this element and all its children.
+  ///
+  /// If dispose is called before this element has exited, the element is
+  /// supposed to cancel its animation and not call [onExit].
+  void dispose();
 
-class _RecursiveVisitor extends _AnimationNodeVisitor<void> {
-  @override
-  void visitGroup(Group node) => node._visitChildren(this);
+  /// Finds the parent element of this element that is of the given type [T].
+  ///
+  /// Returns `null` if no parent of the given type is found.
+  T? findParentOfType<T extends AnimationElement>() {
+    final parent = this.parent;
 
-  @override
-  void visitSequence(Sequence node) => node._visitChildren(this);
+    if (parent is T) {
+      return parent;
+    }
 
-  @override
-  void visitValueAnimation<V>(ValueAnimation<V> node) =>
-      node._visitChildren(this);
+    if (parent.isRoot) {
+      return null;
+    }
 
-  @override
-  void visitReset(Reset node) => node._visitChildren(this);
-
-  @override
-  void visitAction(Action node) => node._visitChildren(this);
-}
-
-class _TransformVisitor extends _AnimationNodeVisitor<AnimationNode> {
-  @override
-  AnimationNode visitGroup(Group node) {
-    return Group([
-      for (final child in node.children) child._accept(this),
-    ]);
+    return parent.findParentOfType<T>();
   }
 
-  @override
-  AnimationNode visitSequence(Sequence node) {
-    return Sequence([
-      for (final child in node.children) child._accept(this),
-    ]);
-  }
-
-  @override
-  AnimationNode visitValueAnimation<V>(ValueAnimation<V> node) => node;
-
-  @override
-  AnimationNode visitReset(Reset node) => node;
-
-  @override
-  AnimationNode visitAction(Action node) => node;
-}
-
-class _MapAnimationSpecsVisitor extends _TransformVisitor {
-  _MapAnimationSpecsVisitor(this.map);
-
-  final AnimationSpec Function(AnimationSpec) map;
-
-  @override
-  AnimationNode visitValueAnimation<V>(ValueAnimation<V> node) {
-    return ValueAnimation(
-      spec: map(node.spec),
-      value: node.value,
-      from: node.from,
-      to: node.to,
-    );
-  }
+  /// Creates a child element for the given [node].
+  @protected
+  AnimationElement createChild(AnimationNode node) => node.createElement()
+    .._parent = this
+    ..animation = animation;
 }
 
 /// Extension methods for [AnimationNode].
 extension AnimationNodeExtension on AnimationNode {
-  /// Returns a new animation node in which the [AnimationSpec] of each
-  /// contained [ValueAnimation] is transformed by the given [map] function.
-  AnimationNode mapAnimationSpecs(AnimationSpec Function(AnimationSpec) map) =>
-      _accept(_MapAnimationSpecsVisitor(map));
-
   /// Returns a new animation node that runs all contained animation nodes at
   /// the given [speed].
-  AnimationNode speed(double speed) =>
-      mapAnimationSpecs((spec) => spec.speed(speed));
+  AnimationNode speed(double speed) => Speed(speed, this);
 
   /// Returns a new animation node that delays the start of this animation by
   /// the specified [duration].
-  AnimationNode delay(Duration duration) => Sequence([Pause(duration), this]);
+  AnimationNode delay(Duration duration) => Delay(duration, this);
 }
 
 /// A group of animation nodes that are started and run in parallel.
@@ -293,50 +270,56 @@ final class Group extends AnimationNode {
   final List<AnimationNode> children;
 
   @override
-  V _accept<V>(_AnimationNodeVisitor<V> visitor) => visitor.visitGroup(this);
-
-  @override
-  void _visitChildren(_AnimationNodeVisitor<void> visitor) {
-    for (final child in children) {
-      child._accept(visitor);
-    }
-  }
-
-  @override
-  _AnimationElement _createElement() => _GroupElement(this);
+  AnimationElement createElement() => _GroupElement(this);
 }
 
-class _GroupElement extends _AnimationElement {
+class _GroupElement extends AnimationElement {
   _GroupElement(this.node);
 
+  @override
   final Group node;
 
-  final runningChildren = <_AnimationElement>[];
+  @override
+  final List<AnimationElement> children = [];
+  final List<Duration> elapsedAfterExitsInCurrentTick = [];
 
   @override
-  void start() {
+  void tick(Duration elapsed) {
     if (node.children.isEmpty) {
-      onComplete?.call();
-    } else {
-      for (final child in node.children.map(createChild)) {
-        runningChildren.add(child);
-        child.onComplete = () {
-          runningChildren.remove(child);
-          if (runningChildren.isEmpty) {
-            onComplete?.call();
-          }
-        };
-        child.start();
+      onExit.call(elapsed);
+      return;
+    }
+
+    if (children.isEmpty) {
+      for (final childNode in node.children) {
+        final child = createChild(childNode);
+        children.add(child);
+        child.onExit = (elapsed) => _onChildExit(child, elapsed);
       }
+    }
+
+    elapsedAfterExitsInCurrentTick.clear();
+    for (final child in List.of(children)) {
+      child.tick(elapsed);
+    }
+  }
+
+  void _onChildExit(AnimationElement child, Duration elapsedAfterExit) {
+    elapsedAfterExitsInCurrentTick.add(elapsedAfterExit);
+    children.remove(child);
+    child.dispose();
+    if (children.isEmpty) {
+      final minElapsedAfterExit =
+          elapsedAfterExitsInCurrentTick.reduce((a, b) => a < b ? a : b);
+      onExit.call(minElapsedAfterExit);
     }
   }
 
   @override
-  void cancel() {
-    for (final child in runningChildren) {
-      child.cancel();
+  void dispose() {
+    for (final child in children) {
+      child.dispose();
     }
-    runningChildren.clear();
   }
 }
 
@@ -349,46 +332,108 @@ final class Sequence extends AnimationNode {
   final List<AnimationNode> children;
 
   @override
-  V _accept<V>(_AnimationNodeVisitor<V> visitor) => visitor.visitSequence(this);
-
-  @override
-  void _visitChildren(_AnimationNodeVisitor<void> visitor) {
-    for (final child in children) {
-      child._accept(visitor);
-    }
-  }
-
-  @override
-  _AnimationElement _createElement() => _SequenceElement(this);
+  AnimationElement createElement() => _SequenceElement(this);
 }
 
-class _SequenceElement extends _AnimationElement {
+class _SequenceElement extends AnimationElement {
   _SequenceElement(this.node);
 
+  @override
   final Sequence node;
 
-  int currentIndex = 0;
-  late _AnimationElement? currentChild;
+  int index = 0;
+  AnimationElement? currentChild;
+  Duration currentElapsed = Duration.zero;
+  Duration elapsedBeforeCurrentChild = Duration.zero;
 
   @override
-  void start() => nextChild();
+  void tick(Duration elapsed) {
+    if (currentChild == null) {
+      _onNextChild(elapsed);
+    }
 
-  @override
-  void cancel() {
-    currentChild?.cancel();
-    currentChild = null;
+    currentElapsed = elapsed;
+    currentChild?.tick(elapsed - elapsedBeforeCurrentChild);
   }
 
-  void nextChild() {
-    if (currentIndex < node.children.length) {
-      final child = createChild(node.children[currentIndex++]);
-      currentChild = child;
-      child.onComplete = nextChild;
-      child.start();
-    } else {
-      currentChild = null;
-      onComplete?.call();
+  void _onNextChild(Duration elapsedAfterExit) {
+    currentChild?.dispose();
+
+    if (index >= node.children.length) {
+      onExit.call(elapsedAfterExit);
+      return;
     }
+
+    final child = createChild(node.children[index++]);
+    currentChild = child;
+    child.onExit = _onChildExit;
+  }
+
+  void _onChildExit(Duration elapsedAfterExit) {
+    elapsedBeforeCurrentChild = currentElapsed - elapsedAfterExit;
+    _onNextChild(elapsedAfterExit);
+  }
+
+  @override
+  void dispose() => currentChild?.dispose();
+}
+
+/// A node that provides default values for unspecified [ValueAnimation]
+/// parameters to its [child] sub-graph.
+final class ValueAnimationDefaults extends AnimationNode {
+  /// Creates a value animation defaults node that provides default values for
+  /// unspecified [ValueAnimation] parameters to its [child] sub-graph.
+  ValueAnimationDefaults(
+    this.child, {
+    this.duration,
+    this.curve,
+  });
+
+  /// The default duration for [ValueAnimation.duration].
+  static const defaultDuration = Duration(milliseconds: 300);
+
+  /// The default curve for [ValueAnimation.curve].
+  static const defaultCurve = Curves.linear;
+
+  static ValueAnimationDefaults? _defaultOf(AnimationElement element) =>
+      element.findParentOfType<_ValueAnimationDefaultsElement>()?.node;
+
+  static Duration _durationOf(AnimationElement element) =>
+      _defaultOf(element)?.duration ?? defaultDuration;
+
+  static Curve _curveOf(AnimationElement element) =>
+      _defaultOf(element)?.curve ?? defaultCurve;
+
+  /// The default duration for [ValueAnimation.duration].
+  final Duration? duration;
+
+  /// The default curve for [ValueAnimation.curve].
+  final Curve? curve;
+
+  /// The animation sub-graph to apply the defaults within.
+  final AnimationNode child;
+
+  @override
+  AnimationElement createElement() => _ValueAnimationDefaultsElement(this);
+}
+
+final class _ValueAnimationDefaultsElement extends AnimationElement {
+  _ValueAnimationDefaultsElement(this.node);
+
+  @override
+  final ValueAnimationDefaults node;
+
+  AnimationElement? _child;
+
+  @override
+  void tick(Duration elapsed) {
+    _child ??= createChild(node.child);
+    _child!.tick(elapsed);
+  }
+
+  @override
+  void dispose() {
+    _child?.dispose();
   }
 }
 
@@ -397,16 +442,14 @@ final class ValueAnimation<T> extends AnimationNode {
   /// Creates a value animation that animates the given [value].
   ValueAnimation({
     required this.value,
-    required this.spec,
     this.from,
     required this.to,
+    this.duration,
+    this.curve,
   });
 
   /// The animated value to animate.
   final AnimatedValue<T> value;
-
-  /// The animation specification.
-  final AnimationSpec spec;
 
   /// The value to start the animation from.
   final T? from;
@@ -414,163 +457,159 @@ final class ValueAnimation<T> extends AnimationNode {
   /// The value to animate to.
   final T to;
 
-  @override
-  V _accept<V>(_AnimationNodeVisitor<V> visitor) =>
-      visitor.visitValueAnimation(this);
+  /// The duration over which to animate the [value].
+  final Duration? duration;
+
+  /// The curve to use for the animation.
+  final Curve? curve;
 
   @override
-  void _visitChildren(_AnimationNodeVisitor<void> visitor) {}
-
-  @override
-  _AnimationElement _createElement() => _ValueAnimationElement(this);
+  AnimationElement createElement() => _ValueAnimationElement(this);
 }
 
-class _ValueAnimationElement<T> extends _AnimationElement
-    implements AnimatableValue<T> {
+class _ValueAnimationElement<T> extends AnimationElement {
   _ValueAnimationElement(this.node);
 
+  @override
   final ValueAnimation<T> node;
 
-  AnimationImpl<T>? animationImpl;
-  _ValueAnimation<T>? valueAnimation;
+  Tween<T?>? _tween;
 
   @override
-  Tween<T?> createTween() => node.value.tweenFactory();
+  void tick(Duration elapsed) {
+    _tween ??= node.value.tweenFactory()
+      ..begin = node.from ?? animation.controller.get(node.value)
+      ..end = node.to;
 
-  @override
-  Ticker createTicker(TickerCallback onTick) =>
-      animation.controller.sync.createTicker(onTick);
+    final duration = node.duration ?? ValueAnimationDefaults._durationOf(this);
+    if (duration == Duration.zero) {
+      animation.controller.set(node.value, node.to);
+      onExit(elapsed);
+      return;
+    } else {
+      final curve = node.curve ?? ValueAnimationDefaults._curveOf(this);
+      final effectiveElapsed = elapsed > duration ? duration : elapsed;
+      final progress = curve
+          .transform(effectiveElapsed.inMilliseconds / duration.inMilliseconds);
+      final value = _tween!.transform(progress);
+      animation.controller.set(node.value, value);
 
-  @override
-  T get value => node.to;
-
-  @override
-  T get animatedValue => node.from ?? valueAnimation!.value;
-
-  @override
-  void start() {
-    final controller = animation.controller;
-    final valueAnimationImpls = controller._valueAnimationImpls;
-
-    final valueAnimation = node.value._animation(controller);
-    this.valueAnimation = valueAnimation;
-
-    final previousAnimationImpl =
-        valueAnimationImpls.remove(valueAnimation) as AnimationImpl<T>?;
-
-    final animationImpl = node.spec.provider
-        .createAnimation(node.spec, this, previousAnimationImpl);
-    this.animationImpl = animationImpl;
-
-    valueAnimationImpls[valueAnimation] = animationImpl;
-
-    animationImpl
-      ..onDone = onCompleteInternal
-      ..onChange = onChange
-      ..start();
-  }
-
-  @override
-  void cancel() {
-    // Calling stop will call the onDone callback, which in turn will call
-    // _onComplete. So we don't need to clean up everything here.
-    // We need to clear the onComplete callback, though, because it must not be
-    // called when an animation element is canceled and _onComplete would
-    // call it.
-    onComplete = null;
-    animationImpl?.stop();
-  }
-
-  void onChange() {
-    final animationImpl = this.animationImpl!;
-    valueAnimation!
-      ..status = animationImpl.status
-      ..value = animationImpl.currentValue;
-  }
-
-  void onCompleteInternal() {
-    final valueAnimationImpls = animation.controller._valueAnimationImpls;
-    // If this elements AnimationImpl is still the current one for the value
-    // animation, remove it from the map of value animation implementations.
-    // If it is not the current one, it has been replaced by another element
-    // that has started before this element completed and should not be removed.
-    if (valueAnimationImpls.containsKey(valueAnimation)) {
-      valueAnimationImpls.remove(valueAnimation);
+      if (progress >= 1) {
+        onExit(elapsed - effectiveElapsed);
+      }
     }
-    valueAnimation = null;
-    animationImpl = null;
-    onComplete?.call();
   }
+
+  @override
+  void dispose() {}
 }
 
 /// An animation node that pauses for a specified duration.
-final class Pause extends ValueAnimation<double> {
+final class Pause extends Delay {
   /// Creates a pause animation that pauses for the specified [duration].
-  Pause(Duration duration) : this._fromSpec(Curves.linear.animation(duration));
-
-  Pause._fromSpec(AnimationSpec spec)
-      : super(spec: spec, value: AnimatedValue.double$(name: 'Pause'), to: 0);
+  Pause(super.duration);
 }
 
-/// An animation node that resets a list of [AnimatedValue]s or all
-/// [AnimatedValue]s of the running animation to their
-/// [AnimatedValue.defaultValue]s.
-final class Reset extends AnimationNode {
-  /// Creates a reset animation that resets the given [values], or if `null`,
-  /// all values of the running animation to their
-  /// [AnimatedValue.defaultValue]s.
-  Reset([this.values]);
+/// An animation node that delays the start of a [child] animation by a
+/// specified [duration].
+///
+/// If the [child] animation is not provided, this node will simply
+/// complete after the specified [duration].
+final class Delay extends AnimationNode {
+  /// Creates a delay animation that delays the start of a [child] animation by
+  /// the specified [duration].
+  Delay(this.duration, [this.child]);
 
-  /// The values to reset.
-  final Set<AnimatedValue<void>>? values;
+  /// The duration to delay the start of the [child] animation.
+  final Duration duration;
 
-  @override
-  V _accept<V>(_AnimationNodeVisitor<V> visitor) => visitor.visitReset(this);
-
-  @override
-  void _visitChildren(_AnimationNodeVisitor<void> visitor) {}
+  /// The child animation to delay.
+  final AnimationNode? child;
 
   @override
-  _AnimationElement _createElement() => _ResetElement(this);
+  AnimationElement createElement() => _DelayElement(this);
 }
 
-class _ResetElement extends _AnimationElement {
-  _ResetElement(this.node);
-
-  final Reset node;
+class _DelayElement extends AnimationElement {
+  _DelayElement(this.node);
 
   @override
-  void start() {
-    var values = node.values;
-    if (values == null) {
-      final collector = _AnimatedValueCollector();
-      animation.root._accept(collector);
-      values = collector.values;
-    }
+  final Delay node;
 
-    values.forEach(animation.controller.reset);
-
-    onComplete?.call();
-  }
+  AnimationElement? _child;
 
   @override
-  void cancel() {}
-}
-
-class _AnimatedValueCollector extends _RecursiveVisitor {
-  final values = <AnimatedValue<void>>{};
-
-  @override
-  void visitValueAnimation<V>(ValueAnimation<V> node) {
-    values.add(node.value);
-  }
-
-  @override
-  void visitReset(Reset node) {
-    if (node.values != null) {
-      values.addAll(node.values!);
+  void tick(Duration elapsed) {
+    if (elapsed >= node.duration) {
+      final effectiveElapsed = elapsed - node.duration;
+      final childNode = node.child;
+      if (childNode != null) {
+        _child ??= createChild(childNode)..onExit = onExit;
+        _child!.tick(effectiveElapsed);
+      } else {
+        onExit(effectiveElapsed);
+      }
     }
   }
+
+  @override
+  void dispose() => _child?.dispose();
+}
+
+/// An animation node that changes the speed with which its [child] animation
+/// animates.
+final class Speed extends AnimationNode {
+  /// Creates a speed animation that changes the speed with which its [child]
+  /// animation animates.
+  Speed(this.speed, this.child);
+
+  /// The speed with which the [child] animation animates.
+  ///
+  /// A speed of `1.0` is as if the animation is running at normal speed. A
+  /// speed of `2.0` is as if the animation is running at double speed.
+  /// A speed of `0.5` is as if the animation is running at half speed.
+  final double speed;
+
+  /// The child animation to change the speed of.
+  final AnimationNode child;
+
+  @override
+  AnimationElement createElement() => _SpeedElement(this);
+}
+
+class _SpeedElement extends AnimationElement {
+  _SpeedElement(this.node);
+
+  @override
+  final Speed node;
+
+  AnimationElement? _child;
+
+  @override
+  void tick(Duration elapsed) {
+    _child ??= createChild(node.child)
+      ..onExit = (elapsedAfterExit) {
+        onExit(
+          Duration(
+            microseconds:
+                (elapsedAfterExit.inMicroseconds.toDouble() / node.speed)
+                    .round(),
+          ),
+        );
+      };
+
+    _child!.tick(elapsed * node.speed);
+  }
+
+  @override
+  void dispose() {}
+}
+
+/// Creates an animation node that resets all [values] to their default values.
+AnimationNode resetAll(Iterable<AnimatedValue<void>> values) {
+  return Group([
+    for (final value in values) value.reset(),
+  ]);
 }
 
 /// An animation node that immediately runs an [action] and waits for it to
@@ -588,52 +627,66 @@ final class Action extends AnimationNode {
   final FutureOr<void> Function() action;
 
   @override
-  T _accept<T>(_AnimationNodeVisitor<T> visitor) => visitor.visitAction(this);
-
-  @override
-  void _visitChildren(_AnimationNodeVisitor<void> visitor) {}
-
-  @override
-  _AnimationElement _createElement() => _ActionElement(this);
+  AnimationElement createElement() => _ActionElement(this);
 }
 
-class _ActionElement extends _AnimationElement {
+enum _ActionState {
+  idle,
+  running,
+  completed,
+}
+
+class _ActionElement extends AnimationElement {
   _ActionElement(this.node);
 
+  @override
   final Action node;
 
+  _ActionState _state = _ActionState.idle;
+  late DateTime _endTime;
+
   @override
-  // ignore: avoid_void_async
-  void start() async {
-    try {
-      final result = node.action();
-      if (result is Future<void>) {
-        await result;
-      }
-    } catch (error, stackTrace) {
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
-          library: 'fleet',
-          context: ErrorDescription('while running action'),
-        ),
-      );
-    } finally {
-      onComplete?.call();
+  void tick(Duration elapsed) {
+    switch (_state) {
+      case _ActionState.idle:
+        Future.sync(() async {
+          _state = _ActionState.running;
+          try {
+            final result = node.action();
+            if (result is Future<void>) {
+              await result;
+            }
+          } catch (error, stackTrace) {
+            FlutterError.reportError(
+              FlutterErrorDetails(
+                exception: error,
+                stack: stackTrace,
+                library: 'fleet',
+                context: ErrorDescription('while running action'),
+              ),
+            );
+          } finally {
+            _endTime = clock.now();
+            _state = _ActionState.completed;
+          }
+        });
+      case _ActionState.running:
+        break;
+      case _ActionState.completed:
+        onExit.call(_endTime.difference(clock.now()));
     }
   }
 
   @override
-  void cancel() {
-    // TODO: Make actions cancelable
-  }
+  void dispose() {}
 }
 
 /// A controller for running animation graph animations.
 class AnimationGraphController {
   /// Creates an animation graph controller.
-  AnimationGraphController({required this.sync});
+  AnimationGraphController({required this.vsync}) {
+    _ticker = vsync.createTicker(_tick);
+  }
 
   /// Returns the nearest [AnimationGraphController] from the given [context],
   /// if available.
@@ -666,19 +719,20 @@ class AnimationGraphController {
   }
 
   /// The ticker provider for creating tickers for animations.
-  final TickerProvider sync;
+  final TickerProvider vsync;
+
+  late final Ticker _ticker;
 
   final _valueAnimations = <AnimatedValue<void>, _ValueAnimation<void>>{};
-  final _valueAnimationImpls = <_ValueAnimation<void>, AnimationImpl<void>>{};
   final _runningAnimations = <GraphAnimation>[];
 
-  /// Starts the animation graph specified by the given [root] node.
+  /// Starts the animation graph specified by the given [node] node.
   ///
   /// Returns a [GraphAnimation] that can be used to wait for the animation to
   /// complete or to cancel it.
-  GraphAnimation animate(AnimationNode root) {
-    final animation = GraphAnimation._(this, root).._start();
-    _runningAnimations.add(animation);
+  GraphAnimation animate(AnimationNode node) {
+    final animation = GraphAnimation._(this, node);
+    animation._mount();
     return animation;
   }
 
@@ -706,12 +760,35 @@ class AnimationGraphController {
   /// Cancels all running animations.
   void cancelAll() {
     for (final animation in List.of(_runningAnimations)) {
-      animation.cancel();
+      animation.dispose();
     }
   }
 
   /// Disposes this controller and cancels all running animations.
-  void dispose() => cancelAll();
+  void dispose() {
+    cancelAll();
+    _ticker.dispose();
+  }
+
+  void _attach(GraphAnimation animation) {
+    if (_runningAnimations.isEmpty) {
+      _ticker.start();
+    }
+    _runningAnimations.add(animation);
+  }
+
+  void _detach(GraphAnimation stateMachine) {
+    _runningAnimations.remove(stateMachine);
+    if (_runningAnimations.isEmpty) {
+      _ticker.stop();
+    }
+  }
+
+  void _tick(Duration elapsed) {
+    for (final animation in _runningAnimations) {
+      animation.tick(elapsed);
+    }
+  }
 }
 
 class _ValueAnimation<T> extends Animation<T>
@@ -749,7 +826,7 @@ class _ValueAnimation<T> extends Animation<T>
   void didUnregisterListener() {}
 }
 
-/// An animation that executes the graph animation specified by a [root]
+/// An animation that executes the graph animation specified by a [node]
 /// animation node.
 ///
 /// You can wait for the animation to complete by awaiting the [done] future.
@@ -758,19 +835,24 @@ class _ValueAnimation<T> extends Animation<T>
 ///
 /// You can also await the [doneOrCanceled] future, which will complete when the
 /// animation has completed or has been canceled.
-final class GraphAnimation {
-  GraphAnimation._(this.controller, this.root);
+final class GraphAnimation extends AnimationElement {
+  GraphAnimation._(this.controller, this.node);
 
   /// The animation graph controller this animation belongs to.
   final AnimationGraphController controller;
 
   /// The root animation node of this animation.
-  final AnimationNode root;
+  @override
+  final AnimationNode node;
 
-  final Completer<void> _doneCompleter = Completer<void>();
-  final Completer<bool> _doneOrCanceledCompleter = Completer<bool>();
+  /// The animation element that has been created from the root animation node.
+  late final AnimationElement element;
 
-  late final _AnimationElement _rootElement;
+  final _doneCompleter = Completer<void>();
+  final _doneOrDisposedCompleter = Completer<bool>();
+
+  @override
+  bool get isRoot => true;
 
   /// A future that completes when the animation has completed.
   Future<void> get done => _doneCompleter.future;
@@ -780,30 +862,31 @@ final class GraphAnimation {
   ///
   /// If the animation has completed, the future will complete with `true`. If
   /// the animation has been canceled, the future will complete with `false`.
-  Future<bool> get doneOrCanceled => _doneOrCanceledCompleter.future;
+  Future<bool> get doneOrCanceled => _doneOrDisposedCompleter.future;
 
-  /// Cancels the animation.
-  void cancel() {
-    if (_doneCompleter.isCompleted) {
+  void _mount() {
+    element = node.createElement()
+      ..onExit = (elapsedAfterExit) {
+        _doneCompleter.complete();
+        dispose();
+      }
+      ..animation = this;
+    controller._attach(this);
+  }
+
+  @override
+  void tick(Duration elapsed) => element.tick(elapsed);
+
+  /// Disposes the animation. If it is still running it will be canceled.
+  @override
+  void dispose() {
+    if (_doneOrDisposedCompleter.isCompleted) {
       return;
     }
 
-    _rootElement.cancel();
-    controller._runningAnimations.remove(this);
-    _doneOrCanceledCompleter.complete(false);
-  }
-
-  void _start() {
-    _rootElement = root._createElement()
-      ..animation = this
-      ..onComplete = _onComplete
-      ..start();
-  }
-
-  void _onComplete() {
-    controller._runningAnimations.remove(this);
-    _doneCompleter.complete();
-    _doneOrCanceledCompleter.complete(true);
+    element.dispose();
+    controller._detach(this);
+    _doneOrDisposedCompleter.complete(_doneCompleter.isCompleted);
   }
 }
 
@@ -811,7 +894,7 @@ final class GraphAnimation {
 mixin AnimationGraphMixin<T extends StatefulWidget> on State<T>
     implements TickerProvider {
   /// The animation graph controller for this state.
-  late final animationGraphController = AnimationGraphController(sync: this);
+  late final animationGraphController = AnimationGraphController(vsync: this);
 
   @override
   void dispose() {

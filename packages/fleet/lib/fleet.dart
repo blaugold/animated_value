@@ -14,17 +14,22 @@ export 'src/animation/graph.dart'
         Action,
         AnimatedDoubleExtension,
         AnimatedValue,
+        AnimationElement,
         AnimationGraphController,
         AnimationGraphMixin,
         AnimationGraphScope,
         AnimationNode,
         AnimationNodeExtension,
+        Delay,
         GraphAnimation,
         Group,
+        OnExitCallback,
         Pause,
-        Reset,
         Sequence,
-        ValueAnimation;
+        Speed,
+        ValueAnimation,
+        ValueAnimationDefaults,
+        resetAll;
 export 'src/animation/parameter.dart'
     show
         AnimatableAlignmentGeometry,

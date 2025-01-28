@@ -9,7 +9,6 @@
 import 'package:fleet/fleet.dart';
 import 'package:flutter/material.dart';
 
-// ignore: avoid_classes_with_only_static_members
 abstract final class SuccessAnimation {
   static final miniGameProgressOpacity = AnimatedValue.double$();
   static final overlayOpacity = AnimatedValue.double$();
@@ -18,22 +17,28 @@ abstract final class SuccessAnimation {
   static final secondaryButtonScale = AnimatedValue.double$();
 
   AnimationNode enterAnimation() {
-    // TODO: allow specifying the default curve for a hole sub-graph.
-    return Sequence([
-      Pause(400.ms),
-      Group([
-        miniGameProgressOpacity.forward(100.ms),
-        overlayOpacity.forward(300.ms, curve: Curves.easeOut),
-      ]),
-      Pause(300.ms),
-      Group([
-        cheerOpacity.forward(300.ms, curve: Curves.easeOut),
-        staggered(delay: 200.ms, [
-          primaryButtonScale.forward(300.ms, curve: Curves.easeOutBack),
-          secondaryButtonScale.forward(300.ms, curve: Curves.easeOutBack),
+    return ValueAnimationDefaults(
+      curve: Curves.easeOut,
+      duration: 300.ms,
+      Sequence([
+        Pause(400.ms),
+        Group([
+          miniGameProgressOpacity.forward(over: 100.ms, curve: Curves.linear),
+          overlayOpacity.forward(),
+        ]),
+        Pause(300.ms),
+        Group([
+          cheerOpacity.forward(),
+          ValueAnimationDefaults(
+            curve: Curves.easeOutBack,
+            staggered(delay: 200.ms, [
+              primaryButtonScale.forward(),
+              secondaryButtonScale.forward(),
+            ]),
+          ),
         ]),
       ]),
-    ]);
+    );
   }
 }
 
