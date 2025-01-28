@@ -1,3 +1,5 @@
+// ignore_for_file: lines_longer_than_80_chars
+
 // SimpleAnimation(SuccessAnimation.miniGameProgressOpacity, 0.4, 0.5),
 // SimpleAnimation(SuccessAnimation.overlayOpacity, 0.4, 0.7, curve: Curves.easeOut),
 // SimpleAnimation(SuccessAnimation.cheerOpacity, 0.9, 1.2, curve: Curves.easeOut),

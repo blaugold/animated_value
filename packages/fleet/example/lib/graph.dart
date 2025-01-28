@@ -20,10 +20,7 @@ AnimationNode _buildAnimation() {
     // Unless `AnimatedValue.to(from: ...)` is specified, the animation of
     // that value starts from the value that was last set, either by an
     // animation, explicitly, or by resetting to the default value.
-    Group([
-      for (final value in [_scale, _rotation, _opacity, _color, _offset])
-        value.reset(),
-    ]),
+    Reset(),
     Group([
       _scale.to(2, 300.ms, curve: Curves.ease),
       _rotation.to(.25, 300.ms, curve: Curves.ease),
@@ -63,7 +60,7 @@ class Page extends StatefulWidget {
 class _PageState extends State<Page>
     with TickerProviderStateMixin, AnimationGraphMixin {
   void _animate() {
-    // Cancel all running animations before starting a new one, incase the
+    // Cancel all running animations before starting a new one, in case the
     // previous animation has not completed. If two animations are run in
     // parallel that affect the same value, the result can be unpredictable.
     // If one animation starts a new value animation for the same animated value
