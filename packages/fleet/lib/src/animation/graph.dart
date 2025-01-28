@@ -276,8 +276,8 @@ class _GroupElement extends AnimationElement {
   @override
   final Group node;
 
-  final List<AnimationElement> children = [];
-  final List<Duration> elapsedAfterExitsInCurrentTick = [];
+  final List<AnimationElement> _children = [];
+  final List<Duration> _elapsedAfterExitsInCurrentTick = [];
 
   @override
   void tick(Duration elapsed) {
@@ -286,34 +286,34 @@ class _GroupElement extends AnimationElement {
       return;
     }
 
-    if (children.isEmpty) {
+    if (_children.isEmpty) {
       for (final childNode in node.children) {
         final child = createChild(childNode);
-        children.add(child);
+        _children.add(child);
         child.onExit = (elapsed) => _onChildExit(child, elapsed);
       }
     }
 
-    elapsedAfterExitsInCurrentTick.clear();
-    for (final child in List.of(children)) {
+    _elapsedAfterExitsInCurrentTick.clear();
+    for (final child in List.of(_children)) {
       child.tick(elapsed);
     }
   }
 
   void _onChildExit(AnimationElement child, Duration elapsedAfterExit) {
-    elapsedAfterExitsInCurrentTick.add(elapsedAfterExit);
-    children.remove(child);
+    _elapsedAfterExitsInCurrentTick.add(elapsedAfterExit);
+    _children.remove(child);
     child.dispose();
-    if (children.isEmpty) {
+    if (_children.isEmpty) {
       final minElapsedAfterExit =
-          elapsedAfterExitsInCurrentTick.reduce((a, b) => a < b ? a : b);
+          _elapsedAfterExitsInCurrentTick.reduce((a, b) => a < b ? a : b);
       onExit.call(minElapsedAfterExit);
     }
   }
 
   @override
   void dispose() {
-    for (final child in children) {
+    for (final child in _children) {
       child.dispose();
     }
   }
@@ -337,41 +337,41 @@ class _SequenceElement extends AnimationElement {
   @override
   final Sequence node;
 
-  int index = 0;
-  AnimationElement? currentChild;
-  Duration currentElapsed = Duration.zero;
-  Duration elapsedBeforeCurrentChild = Duration.zero;
+  int _index = 0;
+  AnimationElement? _currentChild;
+  Duration _currentElapsed = Duration.zero;
+  Duration _elapsedBeforeCurrentChild = Duration.zero;
 
   @override
   void tick(Duration elapsed) {
-    if (currentChild == null) {
+    if (_currentChild == null) {
       _onNextChild(elapsed);
     }
 
-    currentElapsed = elapsed;
-    currentChild?.tick(elapsed - elapsedBeforeCurrentChild);
+    _currentElapsed = elapsed;
+    _currentChild?.tick(elapsed - _elapsedBeforeCurrentChild);
   }
 
   void _onNextChild(Duration elapsedAfterExit) {
-    currentChild?.dispose();
+    _currentChild?.dispose();
 
-    if (index >= node.children.length) {
+    if (_index >= node.children.length) {
       onExit.call(elapsedAfterExit);
       return;
     }
 
-    final child = createChild(node.children[index++]);
-    currentChild = child;
+    final child = createChild(node.children[_index++]);
+    _currentChild = child;
     child.onExit = _onChildExit;
   }
 
   void _onChildExit(Duration elapsedAfterExit) {
-    elapsedBeforeCurrentChild = currentElapsed - elapsedAfterExit;
+    _elapsedBeforeCurrentChild = _currentElapsed - elapsedAfterExit;
     _onNextChild(elapsedAfterExit);
   }
 
   @override
-  void dispose() => currentChild?.dispose();
+  void dispose() => _currentChild?.dispose();
 }
 
 /// A node that provides default values for unspecified [ValueAnimation]
