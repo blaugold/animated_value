@@ -9,6 +9,27 @@ export 'src/animation/animate.dart'
 export 'src/animation/animation.dart'
     show AnimationFromCurveExtension, AnimationSpec;
 export 'src/animation/duration.dart' show DurationFromIntExtension;
+export 'src/animation/graph.dart'
+    show
+        Action,
+        AnimatedDoubleExtension,
+        AnimatedValue,
+        AnimationElement,
+        AnimationGraphController,
+        AnimationGraphMixin,
+        AnimationGraphScope,
+        AnimationNode,
+        AnimationNodeExtension,
+        Delay,
+        GraphAnimation,
+        Group,
+        OnExitCallback,
+        Pause,
+        Sequence,
+        Speed,
+        ValueAnimation,
+        ValueAnimationDefaults,
+        resetAll;
 export 'src/animation/parameter.dart'
     show
         AnimatableAlignmentGeometry,
